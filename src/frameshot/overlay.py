@@ -341,23 +341,87 @@ class StageSession:
 
     Wayland places each fullscreen window on exactly one output, so frameshot
     shows every screen's own pixels on that screen (never a squeezed
-    dual-monitor stitch). Selection + annotation live on one overlay at a
-    time; starting a snip elsewhere moves the session there. Copy/cancel
-    closes every overlay.
+    dual-monitor stitch). The snip itself is a *virtual* rectangle in
+    union-relative coords, so it may span outputs: the overlay where the
+    drag happens owns the interaction, siblings mirror the intersecting
+    portion, and export stitches pixels from the full capture. Starting a
+    fresh snip elsewhere still moves the session there. Copy/cancel closes
+    every overlay.
     """
 
     def __init__(self):
         self.overlays: list["FrameshotOverlay"] = []
         self._closing = False
+        self.full = None  # stitched fullscreen capture (QPixmap)
+        self.union: QRect | None = None  # united screen geometries (logical px)
+        self.sx: float = 1.0  # source pixels per logical pixel (x)
+        self.sy: float = 1.0  # source pixels per logical pixel (y)
+        self._syncing = False
+        self._active: "FrameshotOverlay | None" = None
 
     def add(self, ov: "FrameshotOverlay"):
         ov.session = self
         self.overlays.append(ov)
 
+    def set_source(self, full, union: QRect):
+        """Remember the stitched capture + virtual geometry for cross-snips."""
+        self.full = full
+        self.union = QRect(union)
+        try:
+            self.sx = full.width() / union.width() if union.width() else 1.0
+            self.sy = full.height() / union.height() if union.height() else 1.0
+        except Exception:  # noqa: BLE001
+            self.sx, self.sy = 1.0, 1.0
+
     def selection_started(self, active: "FrameshotOverlay"):
+        self._active = active
         for o in self.overlays:
             if o is not active:
                 o.drop_selection()
+
+    def global_selection(self, ov: "FrameshotOverlay") -> QRect:
+        """Overlay-local sel -> union-relative (virtual) rect."""
+        org = getattr(ov, "origin", QPoint(0, 0))
+        s = ov.sel
+        return QRect(s.x() + org.x(), s.y() + org.y(),
+                     s.width(), s.height())
+
+    def stitched_mapped(self, ov: "FrameshotOverlay") -> QRect | None:
+        """Virtual selection -> stitched source pixels (or None)."""
+        if self.full is None:
+            return None
+        g = self.global_selection(ov)
+        if g.isNull():
+            return QRect()
+        mapped = QRect(int(g.x() * self.sx), int(g.y() * self.sy),
+                       int(g.width() * self.sx),
+                       int(g.height() * self.sy))
+        return mapped.intersected(self.full.rect())
+
+    def selection_changed(self, active: "FrameshotOverlay", local: QRect):
+        """Mirror the active overlay's selection onto siblings.
+
+        `local` may extend beyond the overlay's own bounds (the drag
+        continued onto another output — Qt keeps delivering moves to the
+        press window via implicit grab). Siblings show the intersecting
+        portion so the snip looks continuous across the bezel.
+        """
+        self._active = active
+        if self._syncing:
+            return
+        org = getattr(active, "origin", QPoint(0, 0))
+        gx, gy = local.x() + org.x(), local.y() + org.y()
+        self._syncing = True
+        try:
+            for o in self.overlays:
+                if o is active:
+                    continue
+                o_org = getattr(o, "origin", QPoint(0, 0))
+                mirrored = QRect(gx - o_org.x(), gy - o_org.y(),
+                                 local.width(), local.height())
+                o.set_mirrored_sel(mirrored)
+        finally:
+            self._syncing = False
 
     def finish(self):
         if self._closing:
@@ -381,6 +445,10 @@ class FrameshotOverlay(QWidget):
         self.settings = settings
         self.tool = Tool.MOVE
         self.sel = QRect()
+        # Union-relative top-left of this output (set by app.run_capture_flow;
+        # defaults to 0,0 so single-overlay/tests behave exactly as before).
+        self.origin = QPoint(0, 0)
+        self._mirror_guard = False
         self._press = QPoint()
         self._drag_mode: str | None = None  # new | move | resize-i
         self._resize_idx = -1
@@ -669,6 +737,45 @@ class FrameshotOverlay(QWidget):
         self.predock.show()
         self.set_tool(Tool.MOVE)
         self.update()
+
+    def set_mirrored_sel(self, rect: QRect):
+        """Show another overlay's selection portion (no re-broadcast)."""
+        self._mirror_guard = True
+        try:
+            # A snip living entirely on another output is *not* shown here:
+            # this overlay stays in its pre-snip state (predock + hint),
+            # exactly like the old single-selection behavior. Only a snip
+            # that actually reaches into this output is mirrored.
+            if rect.isNull() or not rect.intersects(self.rect()):
+                self.sel = QRect()
+                self.bar.hide()
+                self.predock.show()
+                self.hint.show()
+                self.update()
+                return
+            self.sel = QRect(rect)
+            if self.sel.isNull():
+                self.bar.hide()
+                self.predock.show()
+                self.hint.show()
+            else:
+                self.hint.hide()
+                self.predock.hide()
+                self._place_bar()
+            self.update()
+        finally:
+            self._mirror_guard = False
+
+    def _notify_sel_changed(self):
+        sess = self.session
+        if sess is None or self._mirror_guard:
+            return
+        if getattr(sess, "_syncing", False):
+            return
+        try:
+            sess.selection_changed(self, QRect(self.sel))
+        except Exception:  # noqa: BLE001
+            pass
 
     def _cancel(self):
         if self.session is not None:
@@ -993,6 +1100,7 @@ class FrameshotOverlay(QWidget):
             self.update()
             return
         self._place_bar()
+        self._notify_sel_changed()
         self.update()
 
     def _move_text_drag(self, pos: QPoint):
@@ -1048,6 +1156,8 @@ class FrameshotOverlay(QWidget):
                 and not self.sel.isNull():
             self.run_ocr()  # selection moved under an open popup: refresh
         self._place_bar()
+        if mode in ("new", "move", "resize"):
+            self._notify_sel_changed()
         self.update()
 
     def mouseDoubleClickEvent(self, event):  # noqa: N802
@@ -1279,7 +1389,52 @@ class FrameshotOverlay(QWidget):
         p.drawLine(x, y + size // 2, x + size, y + size // 2)
 
     # -- export / actions -----------------------------------------------
+    def _stitched_crop(self) -> tuple[QPixmap, QRect] | tuple[None, None]:
+        """Stitched pixels + virtual selection for cross-display snips.
+
+        Returns (crop, global_sel) when this overlay belongs to a session
+        with a stitched source, else (None, None) to use the single-screen
+        path. `global_sel` is union-relative (logical px).
+        """
+        sess = self.session
+        if sess is None or getattr(sess, "full", None) is None:
+            return None, None
+        try:
+            g = sess.global_selection(self)
+            mapped = sess.stitched_mapped(self)
+            if mapped is None or mapped.isNull() or not mapped.isValid():
+                return None, None
+            return sess.full.copy(mapped), g
+        except Exception:  # noqa: BLE001
+            return None, None
+
     def _render_export(self) -> QPixmap:
+        stitched, gsel = self._stitched_crop()
+        if stitched is not None and gsel is not None:
+            # Cross-display (or session) path: pixels come from the stitched
+            # capture; annotations from every overlay are merged so drawing
+            # on either screen survives no matter which toolbar copies.
+            out = QPixmap(stitched.size())
+            out.fill(Qt.GlobalColor.transparent)
+            p = QPainter(out)
+            p.setRenderHint(QPainter.RenderHint.Antialiasing)
+            p.drawPixmap(0, 0, stitched)
+            self._blur_base = stitched
+            try:
+                assert self.session is not None
+                for o in self.session.overlays:
+                    o_org = getattr(o, "origin", QPoint(0, 0))
+                    off = QPoint(o_org.x() - gsel.left(),
+                                 o_org.y() - gsel.top())
+                    shapes = list(o.shapes)
+                    if o._draft is not None:
+                        shapes = shapes + [o._draft]
+                    if shapes:
+                        self._paint_shapes(p, shapes, off)
+            finally:
+                self._blur_base = None
+            p.end()
+            return out
         mapped = self._to_px(self.sel).intersected(self._full.rect())
         crop = self._full.copy(mapped)
         out = QPixmap(crop.size())
@@ -1371,10 +1526,15 @@ class FrameshotOverlay(QWidget):
             return
         self.ocr_status.setText(f"Running {engine} OCR…")
         self._stop_ocr_worker()
-        mapped = self._to_px(self.sel).intersected(self._full.rect())
+        stitched, _g = self._stitched_crop()
+        if stitched is not None:
+            src = stitched
+        else:
+            mapped = self._to_px(self.sel).intersected(self._full.rect())
+            src = self._full.copy(mapped)
         buf = QBuffer()
         buf.open(QIODevice.OpenModeFlag.WriteOnly)
-        self._full.copy(mapped).toImage().save(buf, "PNG")
+        src.toImage().save(buf, "PNG")
         self._ocr_worker = OCRWorker(bytes(buf.data()), engine, lang, self)
         self._ocr_worker.finished.connect(self._ocr_done)
         self._ocr_worker.failed.connect(self._ocr_failed)

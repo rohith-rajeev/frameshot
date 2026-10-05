@@ -89,6 +89,8 @@ def run_capture_flow(settings=None) -> int:
     # Source pixels per logical pixel (uniform across outputs; mixed-DPI
     # setups are approximately right, exactly right when uniform).
     scale = full.width() / union.width() if union.width() else 1.0
+    # Stitched source + virtual geometry: lets a snip span outputs.
+    session.set_source(full, union)
     for scr in screens:
         geo = scr.geometry()
         rel = geo.translated(-union.topLeft())
@@ -97,6 +99,7 @@ def run_capture_flow(settings=None) -> int:
                         int(rel.height() * scale)).intersected(full.rect())
         crop = full.copy(px_rect) if px_rect.isValid() else full
         ov = FrameshotOverlay(crop, settings)
+        ov.origin = rel.topLeft()
         session.add(ov)
         ov.show_on_screen(scr)
     while session.any_visible():
