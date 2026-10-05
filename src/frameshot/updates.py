@@ -1,7 +1,7 @@
 """Self-update: version display, latest-release check, download, install.
 
 No third-party deps — stdlib urllib + a QThread so the Settings page never
-freezes on slow networks. Repository defaults to rohith-rajeev/frame (override
+freezes on slow networks. Repository defaults to rohith-rajeev/frameshot (override
 with FRAMESHOT_UPDATE_REPO="owner/repo").
 """
 
@@ -18,7 +18,7 @@ from PyQt6.QtCore import QThread, pyqtSignal
 
 REPO = os.environ.get(
     "FRAMESHOT_UPDATE_REPO",
-    os.environ.get("FRAME_UPDATE_REPO", "rohith-rajeev/frame"),  # pre-rename
+    os.environ.get("FRAME_UPDATE_REPO", "rohith-rajeev/frameshot"),  # pre-rename
 )
 API_LATEST = f"https://api.github.com/repos/{REPO}/releases/latest"
 TIMEOUT = 15

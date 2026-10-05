@@ -26,7 +26,7 @@ frameshot = "frameshot.cli:main"
 frame = "frameshot.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/rohith-rajeev/frame"
+Homepage = "https://github.com/rohith-rajeev/frameshot"
 
 [tool.setuptools.packages.find]
 where = ["src"]

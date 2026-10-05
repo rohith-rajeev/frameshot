@@ -1,6 +1,6 @@
 # frameshot
 
-> **Status:** CI green on `main` · latest release: [v0.2.0](https://github.com/rohith-rajeev/frame/releases) · repo is currently private, so live badge images are omitted on purpose.
+> **Status:** CI green on `main` · latest release: [v0.2.0](https://github.com/rohith-rajeev/frameshot/releases) · repo is currently private, so live badge images are omitted on purpose.
 
 **A modern, Wayland-native screenshot tool: press a hotkey, drag, annotate, done — the image is already in your clipboard.**
 
@@ -109,7 +109,7 @@ sudo apt install python3-gi wl-clipboard tesseract-ocr   # Debian/Ubuntu
 ## Install
 
 ```bash
-git clone https://github.com/rohith-rajeev/frame && cd frame
+git clone https://github.com/rohith-rajeev/frameshot && cd frame
 bash scripts/install.sh
 ```
 
