@@ -1,7 +1,7 @@
 # frameshot
 
-[![CI](https://github.com/anomalyco/frameshot/actions/workflows/ci.yml/badge.svg)](https://github.com/anomalyco/frameshot/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/anomalyco/frameshot)](https://github.com/anomalyco/frameshot/releases)
+[![CI](https://github.com/rohith-rajeev/frame/actions/workflows/ci.yml/badge.svg)](https://github.com/rohith-rajeev/frame/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/anomalyco/frameshot)](https://github.com/rohith-rajeev/frame/releases)
 
 **A modern, Wayland-native screenshot tool: press a hotkey, drag, annotate, done — the image is already in your clipboard.**
 
@@ -110,7 +110,7 @@ sudo apt install python3-gi wl-clipboard tesseract-ocr   # Debian/Ubuntu
 ## Install
 
 ```bash
-git clone https://github.com/anomalyco/frameshot && cd frame
+git clone https://github.com/rohith-rajeev/frame && cd frame
 bash scripts/install.sh
 ```
 

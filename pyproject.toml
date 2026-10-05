@@ -24,7 +24,7 @@ all = ["paddlepaddle>=3.0", "paddleocr>=2.7", "numpy", "opencv-python-headless",
 frameshot = "frameshot.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/anomalyco/frameshot"
+Homepage = "https://github.com/rohith-rajeev/frame"
 
 [tool.setuptools.packages.find]
 where = ["src"]

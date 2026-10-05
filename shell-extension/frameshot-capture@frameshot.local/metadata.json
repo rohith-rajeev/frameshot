@@ -4,5 +4,5 @@
     "description": "Privileged pixel provider for frameshot (Wayland screenshot tool). Exposes org.frameshot.Capture on the session bus so frameshot can capture the screen silently, without portals or consent dialogs. No UI, no keybindings.",
     "shell-version": ["50"],
     "version": 1,
-    "url": "https://github.com/anomalyco/frameshot"
+    "url": "https://github.com/rohith-rajeev/frame"
 }

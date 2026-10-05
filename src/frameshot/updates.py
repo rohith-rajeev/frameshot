@@ -1,7 +1,7 @@
 """Self-update: version display, latest-release check, download, install.
 
 No third-party deps — stdlib urllib + a QThread so the Settings page never
-freezes on slow networks. Repository defaults to anomalyco/frameshot (override
+freezes on slow networks. Repository defaults to rohith-rajeev/frame (override
 with FRAMESHOT_UPDATE_REPO="owner/repo").
 """
 
@@ -16,7 +16,7 @@ import urllib.request
 
 from PyQt6.QtCore import QThread, pyqtSignal
 
-REPO = os.environ.get("FRAMESHOT_UPDATE_REPO", "anomalyco/frameshot")
+REPO = os.environ.get("FRAMESHOT_UPDATE_REPO", "rohith-rajeev/frame")
 API_LATEST = f"https://api.github.com/repos/{REPO}/releases/latest"
 TIMEOUT = 15
 
