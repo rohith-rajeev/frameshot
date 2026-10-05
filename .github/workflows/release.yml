@@ -1,0 +1,113 @@
+name: Release
+
+# Tag + release whenever main moves to a version that isn't tagged yet.
+# Bump src/frameshot/__init__.py __version__ to cut a release; plain pushes
+# with no version change build nothing.
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-main
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+      release: ${{ steps.ver.outputs.release }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: ver
+        run: |
+          V="$(python3 -c "import sys; sys.path.insert(0,'src'); import frameshot; print(frameshot.__version__)")"
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          if git rev-parse -q --verify "refs/tags/v$V" >/dev/null; then
+            echo "release=false" >> "$GITHUB_OUTPUT"
+            echo "v$V already tagged — nothing to release."
+          else
+            echo "release=true" >> "$GITHUB_OUTPUT"
+            echo "New version: $V"
+          fi
+
+  build:
+    needs: check
+    if: needs.check.outputs.release == 'true'
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            label: linux
+          - os: macos-latest
+            label: macos
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: system deps (Linux Qt)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libgl1 libegl1 libxkbcommon0 libdbus-1-3 libfontconfig1
+      - name: build wheel
+        run: |
+          python -m pip install -U pip build
+          python -m build --wheel --outdir dist
+      - name: bundle per-OS archive
+        run: bash scripts/make-release-bundle.sh "${{ needs.check.outputs.version }}" "${{ matrix.label }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bundle-${{ matrix.label }}
+          path: dist/frameshot-*.tar.gz
+          if-no-files-found: error
+
+  publish:
+    needs: [check, build]
+    if: needs.check.outputs.release == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: bundle-*
+          merge-multiple: true
+          path: dist
+      - name: tag + release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.check.outputs.version }}
+        run: |
+          ls dist/
+          PREV="$(git describe --tags --abbrev=0 2>/dev/null || echo '')"
+          if [ -n "$PREV" ]; then
+            NOTES="$(git log "$PREV..HEAD" --oneline | head -30)"
+          else
+            NOTES="$(git log --oneline | head -30)"
+          fi
+          git tag "v$VERSION"
+          git push origin "v$VERSION"
+          gh release create "v$VERSION" dist/* \
+            --title "frameshot v$VERSION" \
+            --notes "Changes since $PREV:${NOTES:+%0A$NOTES}" \
+            --latest
+      - name: keep only the latest 10 releases
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release list --limit 100 --json tagName,createdAt,isDraft \
+            --jq '[.[] | select(.isDraft == false)] | sort_by(.createdAt) | reverse | .[10:] | .[].tagName' \
+            | while read -r tag; do
+                [ -n "$tag" ] && gh release delete "$tag" --yes --cleanup-tag || true
+              done
+          echo "retention sweep done"

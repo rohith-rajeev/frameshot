@@ -1,5 +1,8 @@
 # frameshot
 
+[![CI](https://github.com/anomalyco/frameshot/actions/workflows/ci.yml/badge.svg)](https://github.com/anomalyco/frameshot/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/anomalyco/frameshot)](https://github.com/anomalyco/frameshot/releases)
+
 **A modern, Wayland-native screenshot tool: press a hotkey, drag, annotate, done — the image is already in your clipboard.**
 
 ![frameshot in action](assets/screenshot.png)
@@ -138,6 +141,7 @@ Manual install:
 | Background | Automatic via systemd (`frameshot-daemon.service`); `frameshot --stop` opts out |
 | Hotkey | Settings page shows/sets it (GNOME); `scripts/setup-hotkey.sh` for the rest |
 | Settings | Gear button (bottom-right pre-snip, toolbar post-snip) or `frameshot settings` |
+| Updates | Settings shows the version and offers **Check for updates**: compares against the latest GitHub release, and on approval downloads the bundle, reinstalls, and restarts on the new version. Releases are cut automatically from `main` (bump `__version__` to ship); only the latest 10 are kept |
 
 CLI reference:
 
