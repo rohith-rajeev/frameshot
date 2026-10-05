@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=frameshot
+Comment=Wayland-native screenshot, annotate, OCR — clipboard first
+Exec=frameshot
+Icon=frameshot
+Terminal=false
+Type=Application
+Categories=Graphics;Utility;
+Keywords=screenshot;snip;annotate;ocr;wayland;
+StartupNotify=false

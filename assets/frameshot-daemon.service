@@ -1,0 +1,17 @@
+[Unit]
+Description=frameshot background service (instant hotkey screenshots)
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+# Display env baked at install; re-run install.sh if your session changes.
+Environment=WAYLAND_DISPLAY=@WAYLAND@
+Environment=DISPLAY=@DISPLAY@
+Environment=XDG_RUNTIME_DIR=@RUNTIME@
+ExecStart=@HOME@/.local/bin/frameshot --daemon
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=default.target

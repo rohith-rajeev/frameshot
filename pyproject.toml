@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "frameshot"
+version = "0.1.0"
+description = "A modern, Wayland-native screenshot tool with annotation, OCR, and clipboard-first workflow."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = [
+  "PyQt6>=6.6",
+  "Pillow>=10",
+]
+authors = [{ name = "frameshot contributors" }]
+
+[project.optional-dependencies]
+ocr-paddle = ["paddlepaddle>=3.0", "paddleocr>=2.7", "numpy", "opencv-python-headless"]
+ocr-tesseract = ["pytesseract>=0.3"]
+all = ["paddlepaddle>=3.0", "paddleocr>=2.7", "numpy", "opencv-python-headless", "pytesseract>=0.3"]
+
+[project.scripts]
+frameshot = "frameshot.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/anomalyco/frameshot"
+
+[tool.setuptools.packages.find]
+where = ["src"]

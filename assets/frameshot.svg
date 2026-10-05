@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#33373e"/>
+      <stop offset="1" stop-color="#16181c"/>
+    </linearGradient>
+  </defs>
+  <rect x="8" y="8" width="240" height="240" rx="56" fill="url(#tile)"/>
+  <g fill="none" stroke="#ffffff" stroke-width="14" stroke-linecap="round" stroke-linejoin="round">
+    <polyline points="52,116 52,52 116,52"/>
+    <polyline points="140,52 204,52 204,116"/>
+    <polyline points="52,140 52,204 116,204"/>
+  </g>
+  <polyline points="140,204 204,204 204,140" fill="none" stroke="#0a84ff" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
