@@ -577,6 +577,17 @@ class FrameshotOverlay(QWidget):
         self.ocr_status.setStyleSheet("color: rgba(255,255,255,170);")
         cl.addWidget(self.ocr_status)
         self.popup.hide()
+        # The overlay wears a crosshair, and Qt children inherit their
+        # parent's cursor when they don't set their own — without this the
+        # whole popup (buttons included) shows a crosshair, looking dead.
+        self.popup.setCursor(Qt.CursorShape.ArrowCursor)
+        for b in (x_b, rerun_b, copy_t):
+            b.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.ocr_lang.setCursor(Qt.CursorShape.ArrowCursor)
+        if self.ocr_lang.lineEdit() is not None:
+            self.ocr_lang.lineEdit().setCursor(Qt.CursorShape.IBeamCursor)
+        # QTextEdit takes mouse events on its viewport, which needs its own.
+        self.ocr_text.viewport().setCursor(Qt.CursorShape.IBeamCursor)
 
         # inline text editor (multiline: Shift+Enter breaks lines,
         # plain Enter places the text AND copies+closes the snip)
@@ -587,6 +598,7 @@ class FrameshotOverlay(QWidget):
         self.text_edit.setPlaceholderText("Type…  (Shift+Enter: new line)")
         self.text_edit.hide()
         self.text_edit.installEventFilter(self)
+        self.text_edit.viewport().setCursor(Qt.CursorShape.IBeamCursor)
         self._text_pos = QPoint()
 
         # hint pill
@@ -695,19 +707,40 @@ class FrameshotOverlay(QWidget):
         self._place_popup()
 
     def _place_popup(self):
-        """Float the OCR popup right above the snip (else below toolbar)."""
+        """Float the OCR popup where it is fully visible and clickable.
+
+        Tries above the snip, then below the toolbar, then centered —
+        skipping any spot clipped by the screen edge or covered by the
+        toolbar (a covered Copy button is an unclickable Copy button).
+        """
         if not self.popup.isVisible() or self.sel.isNull():
             return
         pw, ph = self.popup.width(), self.popup.height()
-        x = min(max(self.sel.left(), 8), self.width() - pw - 8)
-        y = self.sel.top() - ph - 8
-        if y < 8:
-            below_bar = self.bar.y() + self.bar.height() + 8 \
-                if self.bar.isVisible() else self.sel.bottom() + 10
-            y = below_bar
-            if y + ph > self.height() - 8:
-                y = max(8, (self.height() - ph) // 2)
-        self.popup.move(int(x), int(y))
+        x = min(max(self.sel.left(), 8), max(8, self.width() - pw - 8))
+        bar_rect = self.bar.geometry() if self.bar.isVisible() else QRect()
+        margin = 8
+        cands = [
+            QPoint(x, self.sel.top() - ph - 8),  # above the snip
+            QPoint(x, (bar_rect.bottom() + 8) if not bar_rect.isNull()
+                   else self.sel.bottom() + 10),  # below the toolbar
+            QPoint(max(8, (self.width() - pw) // 2),
+                   max(8, (self.height() - ph) // 2)),  # centered
+        ]
+        for pt in cands:
+            r = QRect(int(pt.x()), int(pt.y()), pw, ph)
+            if (r.top() < 8 or r.left() < 8
+                    or r.bottom() > self.height() - 8
+                    or r.right() > self.width() - 8):
+                continue
+            if (not bar_rect.isNull() and r.adjusted(
+                    -margin, -margin, margin, margin).intersects(bar_rect)):
+                continue
+            self.popup.move(r.topLeft())
+            self.popup.raise_()  # never under the toolbar
+            return
+        # Nowhere fits cleanly (tiny output): center it, still on top.
+        self.popup.move(cands[2])
+        self.popup.raise_()
 
     # -- toolbar slots --------------------------------------------------
     def set_tool(self, t: Tool):
@@ -743,6 +776,8 @@ class FrameshotOverlay(QWidget):
         if not on:
             self._stop_ocr_worker()
         self.popup.setVisible(on)
+        if on:
+            self.popup.raise_()  # above the toolbar: every button clickable
         self._layout_chrome()
         if on:
             # Opening the popup IS the request: run immediately, no 2nd click.

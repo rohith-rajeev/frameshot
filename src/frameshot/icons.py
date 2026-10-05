@@ -35,6 +35,24 @@ def _arrow(p: QPainter, a: QPoint, b: QPoint):
                              int(b.y() + head * math.sin(an))))
 
 
+def _head_on_circle(p: QPainter, cx: float, cy: float, r: float,
+                      end_deg: float, ccw: bool):
+    """Arrowhead at an arc endpoint, tangent to the circle.
+
+    Qt coords (y grows down); Qt arc angles run counter-clockwise from
+    3 o'clock, i.e. endpoint = (cx + r*cos, cy - r*sin). `ccw` picks which
+    side the head trails on.
+    """
+    a = math.radians(end_deg)
+    ex = cx + r * math.cos(a)
+    ey = cy - r * math.sin(a)
+    back = end_deg - 25.0 if ccw else end_deg + 25.0
+    b = math.radians(back)
+    bx = cx + r * math.cos(b)
+    by = cy - r * math.sin(b)
+    _arrow(p, QPoint(int(bx), int(by)), QPoint(int(ex), int(ey)))
+
+
 def icon(name: str, size: int = 22) -> QIcon:
     m = size * 0.22
     x0, y0, x1, y1 = m, m, size - m, size - m
@@ -42,14 +60,20 @@ def icon(name: str, size: int = 22) -> QIcon:
     cx, cy = size / 2, size / 2
 
     if name == "move":
-        p.drawLine(int(cx), int(y0), int(cx), int(y1))
-        p.drawLine(int(x0), int(cy), int(x1), int(cy))
+        # Four-way move arrows with an OPEN center (a plain "+" reads as "add").
+        gap = size * 0.10
+        tip = size / 2 - m + 1
+        head = size * 0.17
         for dx, dy in ((0, -1), (0, 1), (-1, 0), (1, 0)):
-            tip = QPoint(int(cx + dx * (size / 2 - m + 1)),
-                         int(cy + dy * (size / 2 - m + 1)))
-            base = QPoint(int(cx + dx * (size / 2 - m - 3)),
-                          int(cy + dy * (size / 2 - m - 3)))
-            p.drawLine(base, tip)
+            p.drawLine(QPoint(int(cx + dx * gap), int(cy + dy * gap)),
+                       QPoint(int(cx + dx * (tip - head * 0.55)),
+                              int(cy + dy * (tip - head * 0.55))))
+            t = (int(cx + dx * tip), int(cy + dy * tip))
+            px_, py_ = -dy, dx  # perpendicular for the head wings
+            for sgn in (-1, 1):
+                p.drawLine(QPoint(*t),
+                           QPoint(int(t[0] - dx * head + px_ * sgn * head * 0.55),
+                                  int(t[1] - dy * head + py_ * sgn * head * 0.55)))
     elif name == "rect":
         p.drawRect(int(x0), int(y0), int(x1 - x0), int(y1 - y0))
     elif name == "ellipse":
@@ -77,29 +101,44 @@ def icon(name: str, size: int = 22) -> QIcon:
         p.setPen(QPen(QColor("#ffffff"), 1.2, Qt.PenStyle.DotLine))
         p.drawRect(int(x0), int(y0), int(x1 - x0), int(y1 - y0))
     elif name == "undo":
-        p.drawArc(int(x0), int(y0 + 1), int(x1 - x0 - 4), int(y1 - y0 - 3), 90 * 16, 180 * 16)
-        tip = QPoint(int(x0), int(cy + 1))
-        p.drawLine(QPoint(int(x0 + 6), int(cy - 3)), tip)
-        p.drawLine(QPoint(int(x0 + 6), int(cy + 5)), tip)
+        # Bold counter-clockwise "revert" arrow (universal undo glyph).
+        r = size * 0.30
+        start, span = 35.0, 280.0
+        p.drawArc(int(cx - r), int(cy - r), int(2 * r), int(2 * r),
+                  int(start * 16), int(span * 16))
+        _head_on_circle(p, cx, cy, r, start + span, ccw=True)
     elif name == "redo":
-        p.drawArc(int(x0 + 4), int(y0 + 1), int(x1 - x0 - 4), int(y1 - y0 - 3), 270 * 16, 180 * 16)
-        tip = QPoint(int(x1), int(cy + 1))
-        p.drawLine(QPoint(int(x1 - 6), int(cy - 3)), tip)
-        p.drawLine(QPoint(int(x1 - 6), int(cy + 5)), tip)
+        # Clockwise twin of undo.
+        r = size * 0.30
+        start, span = 145.0, -280.0
+        p.drawArc(int(cx - r), int(cy - r), int(2 * r), int(2 * r),
+                  int(start * 16), int(span * 16))
+        _head_on_circle(p, cx, cy, r, start + span, ccw=False)
     elif name == "ocr":
-        p.drawRect(int(x0 + 1), int(y0), int(x1 - x0 - 8), int(y1 - y0))
-        for i in range(3):
-            yy = int(y0 + 4 + i * (y1 - y0 - 6) / 2)
-            p.drawLine(int(x0 + 4), yy, int(x1 - 7), yy)
-        _arrow(p, QPoint(int(x1 - 3), int(y1)), QPoint(int(x1 - 1), int(y0 + 2)))
+        # Document with text lines + magnifier: "read text from image".
+        dw = int((x1 - x0) * 0.60)
+        p.drawRect(int(x0), int(y0), dw, int(y1 - y0))
+        for i in range(2):
+            yy = int(y0 + 4 + i * (y1 - y0 - 6) / 2.4)
+            p.drawLine(int(x0 + 3), yy, int(x0 + dw - 3), yy)
+        mr = size * 0.21
+        mcx, mcy = x1 - mr - 1, y1 - mr - 1
+        p.drawEllipse(int(mcx - mr), int(mcy - mr), int(2 * mr), int(2 * mr))
+        p.drawLine(int(mcx + mr * 0.70), int(mcy + mr * 0.70),
+                   int(x1 - 1), int(y1 - 1))
     elif name == "copy":
         p.drawRect(int(x0 + 3), int(y0 + 3), int(x1 - x0 - 3), int(y1 - y0 - 3))
         p.drawLine(int(x0), int(y0 + 4), int(x0), int(y1))
         p.drawLine(int(x0), int(y1), int(x0 + 7), int(y1))
     elif name == "save":
-        p.drawRect(int(x0 + 1), int(y0 + 1), int(x1 - x0 - 2), int(y1 - y0 - 2))
-        p.drawLine(int(x0 + 1), int(y0 + 7), int(x1 - 1), int(y0 + 7))
-        p.drawRect(int(cx - 3), int(y1 - 8), 7, 8)
+        # Floppy disk: body + top shutter with notch + bottom label.
+        p.drawRect(int(x0 + 1), int(y0 + 2), int(x1 - x0 - 2), int(y1 - y0 - 3))
+        sw = (x1 - x0) * 0.44
+        sh = (y1 - y0) * 0.36
+        p.drawRect(int(cx - sw / 2), int(y0 + 2), int(sw), int(sh))
+        p.drawLine(int(cx), int(y0 + 3), int(cx), int(y0 + 2 + sh))
+        lh = (y1 - y0) * 0.30
+        p.drawRect(int(x0 + 4), int(y1 - 1 - lh), int(x1 - x0 - 8), int(lh))
     elif name == "close":
         p.drawLine(int(x0 + 2), int(y0 + 2), int(x1 - 2), int(y1 - 2))
         p.drawLine(int(x1 - 2), int(y0 + 2), int(x0 + 2), int(y1 - 2))
@@ -107,11 +146,22 @@ def icon(name: str, size: int = 22) -> QIcon:
         p.drawLine(int(x0 + 1), int(cy), int(cx - 1), int(y1 - 2))
         p.drawLine(int(cx - 1), int(y1 - 2), int(x1 - 1), int(y0 + 3))
     elif name == "gear":
-        p.drawEllipse(int(cx - 5), int(cy - 5), 10, 10)
+        # Toothed cog (the old circle+spokes read as a sun): 8 chunky teeth,
+        # an outer ring tying them together, and a hub hole.
+        p.save()
+        p.setPen(QPen(QColor("#ffffff"), max(2.0, size * 0.11),
+                      Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
         for a in range(0, 360, 45):
             r = math.radians(a)
-            p.drawLine(QPoint(int(cx + 7 * math.cos(r)), int(cy + 7 * math.sin(r))),
-                       QPoint(int(cx + 10 * math.cos(r)), int(cy + 10 * math.sin(r))))
+            p.drawLine(QPoint(int(cx + size * 0.30 * math.cos(r)),
+                              int(cy + size * 0.30 * math.sin(r))),
+                       QPoint(int(cx + size * 0.43 * math.cos(r)),
+                              int(cy + size * 0.43 * math.sin(r))))
+        p.restore()
+        rr = size * 0.26
+        p.drawEllipse(int(cx - rr), int(cy - rr), int(2 * rr), int(2 * rr))
+        hr = size * 0.10
+        p.drawEllipse(int(cx - hr), int(cy - hr), int(2 * hr), int(2 * hr))
     p.end()
     return QIcon(px)
 
