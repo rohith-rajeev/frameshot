@@ -109,7 +109,7 @@ sudo apt install python3-gi wl-clipboard tesseract-ocr   # Debian/Ubuntu
 ## Install
 
 ```bash
-git clone https://github.com/rohith-rajeev/frameshot && cd frame
+git clone https://github.com/rohith-rajeev/frameshot && cd frameshot
 bash scripts/install.sh
 ```
 
