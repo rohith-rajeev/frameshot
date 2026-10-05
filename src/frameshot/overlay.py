@@ -1410,3 +1410,7 @@ class FrameshotOverlay(QWidget):
             self.set_tool(Tool.BLUR)
         else:
             super().keyPressEvent(event)
+
+
+# Backwards-compat alias for imports from before the rename.
+FrameOverlay = FrameshotOverlay

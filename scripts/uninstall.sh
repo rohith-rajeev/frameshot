@@ -7,19 +7,19 @@
 #   --dry-run            print what would be removed, change nothing
 #   --yes                skip confirmation prompts (keeps screenshots unless
 #                        --remove-screenshots is also given)
-#   --keep-config        keep ~/.config/frameshot/settings.ini
-#   --remove-screenshots also delete ~/Pictures/frameshot (your saved shots)
+#   --keep-config        keep ~/.config/frameshot/settings.ini (and legacy frame one)
+#   --remove-screenshots also delete ~/Pictures/frameshot + ~/Pictures/frame (your saved shots)
 #
-# What is removed:
-#   - running `frameshot --daemon` / open frameshot windows
-#   - ~/.local/bin/frameshot symlink
-#   - ~/.local/share/applications/frameshot.desktop
-#   - GNOME custom keybinding .../custom-keybindings/frameshot/ (other apps' bindings untouched)
-#   - GNOME Shell extension frameshot-capture@frameshot.local (disable + remove dir)
-#   - ~/.config/autostart/frameshot*.desktop (only if you added the daemon there)
+# What is removed (both current `frameshot` names and pre-rename `frame` leftovers):
+#   - running `frameshot --daemon` / `frame --daemon` + open app windows
+#   - ~/.local/bin/frameshot + ~/.local/bin/frame symlinks
+#   - ~/.local/share/applications/frameshot.desktop + frame.desktop
+#   - GNOME custom keybindings .../custom-keybindings/frameshot/ + .../frame/
+#   - GNOME Shell extensions frameshot-capture@frameshot.local + frame-capture@frame.local
+#   - ~/.config/autostart/frameshot*.desktop + frame*.desktop (only ours)
 #   - <repo>/.venv (the editable install)
-#   - ~/.config/frameshot (unless --keep-config)
-#   - ~/Pictures/frameshot (only with --remove-screenshots)
+#   - ~/.config/frameshot + ~/.config/frame (unless --keep-config)
+#   - ~/Pictures/frameshot + ~/Pictures/frame (only with --remove-screenshots)
 #
 # NOT touched (may be shared with other apps):
 #   system packages (grim, wl-clipboard, tesseract, python3-gi).
@@ -67,6 +67,7 @@ echo "frameshot uninstaller (repo: $REPO)"
 [ "$DRY_RUN" = 1 ] && echo "--- DRY RUN: nothing will be changed ---"
 
 # 1. Stop warm daemon / open frameshot windows (precise match; won't touch mutter-x11-frames etc.)
+# `[f]rame` also matches `frameshot`, so pre-rename daemons are covered too.
 if pgrep -f "[f]rame --daemon" >/dev/null 2>&1; then
   if [ "$DRY_RUN" = 1 ]; then
     echo "[dry-run] would stop: $(pgrep -af "[f]rame --daemon" | cut -c1-100)"
@@ -77,55 +78,65 @@ if pgrep -f "[f]rame --daemon" >/dev/null 2>&1; then
 else
   echo "No frameshot daemon running."
 fi
-if pgrep -f "[.]venv/bin/frameshot" >/dev/null 2>&1; then
-  if [ "$DRY_RUN" = 1 ]; then
-    echo "[dry-run] would stop: $(pgrep -af "[.]venv/bin/frameshot" | cut -c1-100)"
-  else
-    echo "Closing open frameshot windows..."
-    pkill -f "[.]venv/bin/frameshot" || true
+for pat in "[.]venv/bin/frameshot" "[.]venv/bin/frame"; do
+  if pgrep -f "$pat" >/dev/null 2>&1; then
+    if [ "$DRY_RUN" = 1 ]; then
+      echo "[dry-run] would stop: $(pgrep -af "$pat" | cut -c1-100)"
+    else
+      echo "Closing open app windows ($pat)..."
+      pkill -f "$pat" || true
+    fi
   fi
-fi
+done
 
-# 1b. Background service (systemd unit + legacy autostart file)
+# 1b. Background service (systemd unit + legacy autostart file, new + pre-rename)
 if [ "$DRY_RUN" = 1 ]; then
-  echo "[dry-run] would stop/disable/remove frameshot-daemon.service + autostart file"
+  echo "[dry-run] would stop/disable/remove frameshot-daemon.service + frame-daemon.service + autostart files"
 else
-  systemctl --user stop frameshot-daemon.service 2>/dev/null || true
-  systemctl --user disable frameshot-daemon.service 2>/dev/null || true
-  rm -f "$HOME/.config/systemd/user/frameshot-daemon.service"
-  rm -f "$HOME/.config/autostart/frameshot-daemon.desktop"
+  for svc in frameshot-daemon.service frame-daemon.service; do
+    systemctl --user stop "$svc" 2>/dev/null || true
+    systemctl --user disable "$svc" 2>/dev/null || true
+    rm -f "$HOME/.config/systemd/user/$svc"
+  done
+  rm -f "$HOME/.config/autostart/frameshot-daemon.desktop" \
+        "$HOME/.config/autostart/frame-daemon.desktop"
   echo "Background service removed."
 fi
 
-# 2. ~/.local/bin/frameshot symlink (only if it belongs to frameshot)
-BIN_LINK="$HOME/.local/bin/frameshot"
+# 2. ~/.local/bin symlinks (only if they belong to us; covers pre-rename `frame`)
+for BIN_LINK in "$HOME/.local/bin/frameshot" "$HOME/.local/bin/frame"; do
 if [ -L "$BIN_LINK" ]; then
   target="$(readlink "$BIN_LINK")"
   case "$target" in
-    *frameshot*) run "remove symlink $BIN_LINK -> $target" rm -f "$BIN_LINK" ;;
-    *) echo "WARNING: $BIN_LINK points to $target (not frameshot) — left alone." ;;
+    *frameshot*|*frame*) run "remove symlink $BIN_LINK -> $target" rm -f "$BIN_LINK" ;;
+    *) echo "WARNING: $BIN_LINK points to $target — left alone." ;;
   esac
 elif [ -e "$BIN_LINK" ]; then
   echo "WARNING: $BIN_LINK exists but is not a symlink — left alone."
 else
   echo "No $BIN_LINK."
 fi
+done
 
-# 3. Desktop file (only if it is ours)
-DESKTOP_FILE="$HOME/.local/share/applications/frameshot.desktop"
+# 3. Desktop files (only if ours; covers pre-rename `frame`)
+for DESKTOP_FILE in "$HOME/.local/share/applications/frameshot.desktop" \
+                    "$HOME/.local/share/applications/frame.desktop"; do
 if [ -f "$DESKTOP_FILE" ]; then
-  if grep -qi "frameshot" "$DESKTOP_FILE"; then
+  if grep -qi "frameshot\|^Exec=.*frame" "$DESKTOP_FILE"; then
     run "remove $DESKTOP_FILE" rm -f "$DESKTOP_FILE"
   else
-    echo "WARNING: $DESKTOP_FILE doesn't mention frameshot — left alone."
+    echo "WARNING: $DESKTOP_FILE doesn't look like ours — left alone."
   fi
 else
   echo "No $DESKTOP_FILE."
 fi
+done
 
-# 3b. App icons (only frameshot's own)
+# 3b. App icons (only our own, new + pre-rename)
 for icon in "$HOME/.local/share/icons/hicolor/scalable/apps/frameshot.svg" \
-            "$HOME/.local/share/icons/hicolor/256x256/apps/frameshot.png"; do
+            "$HOME/.local/share/icons/hicolor/256x256/apps/frameshot.png" \
+            "$HOME/.local/share/icons/hicolor/scalable/apps/frame.svg" \
+            "$HOME/.local/share/icons/hicolor/256x256/apps/frame.png"; do
   if [ -f "$icon" ]; then
     run "remove icon $icon" rm -f "$icon"
   fi
@@ -134,14 +145,15 @@ if [ "$DRY_RUN" = 0 ]; then
   gtk-update-icon-cache -f -t ~/.local/share/icons/hicolor 2>/dev/null || true
 fi
 
-# 4. GNOME custom keybinding — remove ONLY our entry, keep everyone else's
+# 4. GNOME custom keybindings — remove ONLY our entries, keep everyone else's
+# (current `frameshot/` path + pre-rename `frame/` path)
 GBASE="/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings"
-GFRAMESHOT="${GBASE}/frameshot/"
 if command -v gsettings >/dev/null 2>&1 && \
    gsettings list-schemas 2>/dev/null | grep -q "org.gnome.settings-daemon.plugins.media-keys"; then
   current="$(gsettings get org.gnome.settings-daemon.plugins.media-keys custom-keybindings 2>/dev/null || echo "[]")"
-  if [[ "$current" == *"$GFRAMESHOT"* ]]; then
-    new_list="$(python3 - " $GFRAMESHOT" <<'EOF'
+  for GPATH in "${GBASE}/frameshot/" "${GBASE}/frame/"; do
+  if [[ "$current" == *"$GPATH"* ]]; then
+    new_list="$(python3 - " $GPATH" <<'EOF'
 import sys
 path = sys.argv[1]
 try:
@@ -153,21 +165,23 @@ print(str(lst).replace("'", "'"))
 EOF
     <<<"$current")"
     if [ "$DRY_RUN" = 1 ]; then
-      echo "[dry-run] would remove GNOME binding $GFRAMESHOT (keeping: $new_list)"
+      echo "[dry-run] would remove GNOME binding $GPATH (keeping: $new_list)"
     else
-      echo "Removing GNOME hotkey binding..."
+      echo "Removing GNOME hotkey binding $GPATH..."
       gsettings set org.gnome.settings-daemon.plugins.media-keys custom-keybindings "$new_list" || true
-      gsettings reset-recursively "org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:${GFRAMESHOT}" || true
+      gsettings reset-recursively "org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:${GPATH}" || true
+      current="$new_list"
     fi
   else
-    echo "No GNOME frameshot hotkey binding."
+    echo "No GNOME hotkey binding $GPATH."
   fi
+  done
 else
   echo "gsettings/GNOME schema not present — skipping hotkey cleanup."
 fi
 
-# 4b. GNOME Shell extension (disable + remove our dir only)
-EXT_UUID="frameshot-capture@frameshot.local"
+# 4b. GNOME Shell extensions (disable + remove our dirs only, new + pre-rename)
+for EXT_UUID in "frameshot-capture@frameshot.local" "frame-capture@frame.local"; do
 EXT_DIR="$HOME/.local/share/gnome-shell/extensions/$EXT_UUID"
 if [ -d "$EXT_DIR" ]; then
   if [ "$DRY_RUN" = 1 ]; then
@@ -189,14 +203,15 @@ print(lst)
 else
   echo "No GNOME extension $EXT_UUID."
 fi
+done
 
-# 5. Autostart entries (only frameshot's own)
+# 5. Autostart entries (only our own; `frame*` also matches `frameshot*`)
 shopt -s nullglob
-for f in "$HOME/.config/autostart/"frameshot*.desktop; do
-  if grep -qi "frameshot" "$f"; then
+for f in "$HOME/.config/autostart/"frame*.desktop; do
+  if grep -qi "frameshot" "$f" || grep -qi "frame" "$f"; then
     run "remove autostart entry $f" rm -f "$f"
   else
-    echo "WARNING: $f doesn't mention frameshot — left alone."
+    echo "WARNING: $f doesn't look like ours — left alone."
   fi
 done
 shopt -u nullglob
@@ -208,8 +223,8 @@ else
   echo "No $REPO/.venv."
 fi
 
-# 7. Settings
-CONFIG_DIR="$HOME/.config/frameshot"
+# 7. Settings (current + pre-rename dir)
+for CONFIG_DIR in "$HOME/.config/frameshot" "$HOME/.config/frame"; do
 if [ "$KEEP_CONFIG" = 1 ]; then
   echo "Keeping $CONFIG_DIR (--keep-config)."
 elif [ -d "$CONFIG_DIR" ]; then
@@ -217,9 +232,10 @@ elif [ -d "$CONFIG_DIR" ]; then
 else
   echo "No $CONFIG_DIR."
 fi
+done
 
-# 8. Screenshots — user data, never deleted silently
-SHOTS_DIR="$HOME/Pictures/frameshot"
+# 8. Screenshots — user data, never deleted silently (both dirs)
+for SHOTS_DIR in "$HOME/Pictures/frameshot" "$HOME/Pictures/frame"; do
 if [ -d "$SHOTS_DIR" ]; then
   if [ "$REMOVE_SHOTS" = 1 ]; then
     if ask "Delete your saved screenshots in $SHOTS_DIR?"; then
@@ -233,14 +249,15 @@ if [ -d "$SHOTS_DIR" ]; then
 else
   echo "No $SHOTS_DIR."
 fi
+done
 
 cat <<'EOF'
 
 --- manual leftovers (if you added them by hand) ---
-Sway (~/.config/sway/config):            delete the `bindsym ... exec frameshot` line
-Hyprland (~/.config/hypr/hyprland.conf): delete the `bind = ..., exec, frameshot` line
-KDE Settings -> Shortcuts:               delete the custom `frameshot` entry
-GNOME Startup Apps:                      remove `frameshot --daemon` if you added it
+Sway (~/.config/sway/config):            delete the `bindsym ... exec frameshot` (or old `frame`) line
+Hyprland (~/.config/hypr/hyprland.conf): delete the `bind = ..., exec, frameshot` (or old `frame`) line
+KDE Settings -> Shortcuts:               delete the custom `frameshot` (or old `frame`) entry
+GNOME Startup Apps:                      remove `frameshot --daemon` (or old `frame --daemon`) if you added it
 
 To delete this repo too:  rm -rf <repo-dir>
 System packages (grim, wl-clipboard, tesseract, python3-gi) were left installed.

@@ -12,6 +12,11 @@ def default_config_dir() -> Path:
     return Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "frameshot"
 
 
+def _legacy_config_dir() -> Path:
+    """Pre-rename config dir — read for upgrade migration, never written."""
+    return Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "frame"
+
+
 def default_save_dir() -> Path:
     pictures = Path.home() / "Pictures" / "frameshot"
     return pictures
@@ -49,12 +54,21 @@ class FrameshotSettings:
 
     @classmethod
     def load(cls, path: Path | str | None = None) -> "FrameshotSettings":
-        cfg_path = Path(path) if path is not None else (default_config_dir() / "settings.ini")
+        if path is not None:
+            cfg_path = Path(path)
+        else:
+            cfg_path = default_config_dir() / "settings.ini"
+            if not cfg_path.exists():
+                legacy = _legacy_config_dir() / "settings.ini"
+                if legacy.exists():
+                    cfg_path = legacy  # pre-rename install: migrate on next save
         s = cls(_path=cfg_path)
         if cfg_path.exists():
             cp = configparser.ConfigParser(interpolation=None)
             cp.read(cfg_path)
-            g = cp["frameshot"] if "frameshot" in cp else {}
+            # Pre-rename installs used a [frame] section; prefer [frameshot].
+            g = cp["frameshot"] if "frameshot" in cp else (
+                cp["frame"] if "frame" in cp else {})
             s.save_to_disk = g.getboolean("save_to_disk", fallback=s.save_to_disk)
             s.save_dir = g.get("save_dir", fallback=s.save_dir)
             s.filename_template = g.get("filename_template", fallback=s.filename_template)
@@ -73,8 +87,13 @@ class FrameshotSettings:
         return s
 
     def save(self, path: Path | str | None = None) -> Path:
-        cfg_path = Path(path) if path is not None else (
-            self._path or (default_config_dir() / "settings.ini"))
+        if path is not None:
+            cfg_path = Path(path)
+        elif self._path and _legacy_config_dir() not in self._path.parents:
+            cfg_path = self._path
+        else:
+            # Fresh save (or migrated legacy config) always lands in the new dir.
+            cfg_path = default_config_dir() / "settings.ini"
         cfg_path.parent.mkdir(parents=True, exist_ok=True)
         cp = configparser.ConfigParser(interpolation=None)
         cp["frameshot"] = {
@@ -96,3 +115,7 @@ class FrameshotSettings:
             cp.write(f)
         self._path = cfg_path
         return cfg_path
+
+
+# Backwards-compat alias for imports from before the rename.
+FrameSettings = FrameshotSettings

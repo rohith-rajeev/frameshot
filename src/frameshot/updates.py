@@ -16,7 +16,10 @@ import urllib.request
 
 from PyQt6.QtCore import QThread, pyqtSignal
 
-REPO = os.environ.get("FRAMESHOT_UPDATE_REPO", "rohith-rajeev/frame")
+REPO = os.environ.get(
+    "FRAMESHOT_UPDATE_REPO",
+    os.environ.get("FRAME_UPDATE_REPO", "rohith-rajeev/frame"),  # pre-rename
+)
 API_LATEST = f"https://api.github.com/repos/{REPO}/releases/latest"
 TIMEOUT = 15
 

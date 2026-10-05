@@ -22,6 +22,8 @@ all = ["paddlepaddle>=3.0", "paddleocr>=2.7", "numpy", "opencv-python-headless",
 
 [project.scripts]
 frameshot = "frameshot.cli:main"
+# Backwards-compat alias for installs from before the rename.
+frame = "frameshot.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/rohith-rajeev/frame"

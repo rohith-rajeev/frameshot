@@ -22,27 +22,39 @@ from pathlib import Path
 GNOME_SCHEMA = "org.gnome.settings-daemon.plugins.media-keys"
 GNOME_CHILD = "org.gnome.settings-daemon.plugins.media-keys.custom-keybinding"
 FRAMESHOT_DPATH = "/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/frameshot/"
+# Pre-rename GNOME binding path — still recognized (migration + cleanup).
+FRAME_DPATH = "/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/frame/"
 DEFAULT_BINDING = "<Primary><Shift>f"  # Ctrl+Shift+F (spec default)
 SUGGESTED_BINDING = "<Primary><Shift>g"  # conflict-free fallback (grab)
 FRAMESHOT_CMD = "frameshot"
+FRAME_CMD = FRAMESHOT_CMD  # backwards-compat alias
 
 
 def frameshot_cmd_abs() -> str:
     """Absolute binary path — keybinding launchers often lack ~/.local/bin."""
-    found = shutil.which("frameshot")
-    if found:
-        return found
-    local = Path.home() / ".local/bin/frameshot"
-    if local.exists():
-        return str(local)
+    for name in ("frameshot", "frame"):  # pre-rename binary still works
+        found = shutil.which(name)
+        if found:
+            return found
+    for name in ("frameshot", "frame"):
+        local = Path.home() / f".local/bin/{name}"
+        if local.exists():
+            return str(local)
     return sys.argv[0]
+
+
+frame_cmd_abs = frameshot_cmd_abs  # backwards-compat alias
 
 
 # -- daemon ---------------------------------------------------------------
 def _frameshot_bin() -> str:
-    if shutil.which("frameshot"):
-        return "frameshot"
+    for name in ("frameshot", "frame"):  # pre-rename binary still works
+        if shutil.which(name):
+            return name
     return sys.argv[0]
+
+
+_frame_bin = _frameshot_bin  # backwards-compat alias
 
 
 def _daemon_pids() -> list[int]:
@@ -63,8 +75,11 @@ def _daemon_pids() -> list[int]:
             except (FileNotFoundError, PermissionError):
                 continue
             parts = [a for a in raw if a]
+            # Match both the current `frameshot --daemon` and a pre-rename
+            # `frame --daemon` still running from before the upgrade.
             if len(parts) >= 2 and parts[-1] == b"--daemon" and (
-                    parts[-2] == b"frameshot" or parts[-2].endswith(b"/frameshot")):
+                    parts[-2] in (b"frameshot", b"frame")
+                    or parts[-2].endswith((b"/frameshot", b"/frame"))):
                 found.append(int(pid))
     except FileNotFoundError:
         pass  # not Linux — no daemon support
@@ -193,10 +208,11 @@ def gnome_binding() -> tuple[str | None, str | None]:
     """Return (binding, command) of frameshot's GNOME hotkey, or (None, None)."""
     Gio = _settings()
     s = Gio.Settings.new(GNOME_SCHEMA)
-    if FRAMESHOT_DPATH not in list(s.get_strv("custom-keybindings")):
-        return None, None
-    c = Gio.Settings.new_with_path(GNOME_CHILD, FRAMESHOT_DPATH)
-    return c.get_string("binding") or None, c.get_string("command") or None
+    for dpath in (FRAMESHOT_DPATH, FRAME_DPATH):  # FRAME_DPATH = pre-rename
+        if dpath in list(s.get_strv("custom-keybindings")):
+            c = Gio.Settings.new_with_path(GNOME_CHILD, dpath)
+            return c.get_string("binding") or None, c.get_string("command") or None
+    return None, None
 
 
 def set_gnome_binding(binding: str, command: str | None = None) -> None:
@@ -205,7 +221,9 @@ def set_gnome_binding(binding: str, command: str | None = None) -> None:
     lst = list(s.get_strv("custom-keybindings"))
     if FRAMESHOT_DPATH not in lst:
         lst.append(FRAMESHOT_DPATH)
-        s.set_strv("custom-keybindings", lst)
+    if FRAME_DPATH in lst:  # drop the pre-rename entry on upgrade
+        lst.remove(FRAME_DPATH)
+    s.set_strv("custom-keybindings", lst)
     c = Gio.Settings.new_with_path(GNOME_CHILD, FRAMESHOT_DPATH)
     c.set_string("name", "frameshot screenshot")
     c.set_string("command", command or frameshot_cmd_abs())
@@ -248,7 +266,7 @@ def find_binding_conflicts(binding: str, ignore_frameshot: bool = True
     want = _norm_binding(binding)
     hits = []
     for path, name, other, cmd in list_custom_bindings():
-        if ignore_frameshot and path == FRAMESHOT_DPATH:
+        if ignore_frameshot and path in (FRAMESHOT_DPATH, FRAME_DPATH):
             continue
         if other and _norm_binding(other) == want:
             hits.append((path, name, cmd))
@@ -258,12 +276,14 @@ def find_binding_conflicts(binding: str, ignore_frameshot: bool = True
 def clear_gnome_binding() -> None:
     Gio = _settings()
     s = Gio.Settings.new(GNOME_SCHEMA)
-    lst = [p for p in s.get_strv("custom-keybindings") if p != FRAMESHOT_DPATH]
+    lst = [p for p in s.get_strv("custom-keybindings")
+           if p not in (FRAMESHOT_DPATH, FRAME_DPATH)]
     s.set_strv("custom-keybindings", lst)
-    c = Gio.Settings.new_with_path(GNOME_CHILD, FRAMESHOT_DPATH)
-    c.reset("name")
-    c.reset("command")
-    c.reset("binding")
+    for dpath in (FRAMESHOT_DPATH, FRAME_DPATH):
+        c = Gio.Settings.new_with_path(GNOME_CHILD, dpath)
+        c.reset("name")
+        c.reset("command")
+        c.reset("binding")
     Gio.Settings.sync()
 
 

@@ -113,10 +113,10 @@ def run() -> int:
                       ("tesseract", "OCR fallback"), ("wl-copy", "clipboard")):
         print(f"{tool} ({who}): {'present' if _have(tool) else 'absent'}")
     try:
-        from .background import list_custom_bindings, FRAMESHOT_DPATH
+        from .background import list_custom_bindings, FRAMESHOT_DPATH, FRAME_DPATH
         print("GNOME custom hotkeys:")
         for path, name, binding, cmd in list_custom_bindings():
-            mark = "  <-- frameshot" if path == FRAMESHOT_DPATH else ""
+            mark = "  <-- frameshot" if path in (FRAMESHOT_DPATH, FRAME_DPATH) else ""
             print(f"  {binding or '(none)'} -> {name or path} [{cmd}]{mark}")
     except Exception as e:  # noqa: BLE001
         print(f"GNOME custom hotkeys: unreadable ({e})")

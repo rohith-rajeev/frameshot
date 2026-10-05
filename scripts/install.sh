@@ -12,8 +12,10 @@ $PY -m venv --system-site-packages .venv
 .venv/bin/pip install -e ".[ocr-tesseract]"
 mkdir -p ~/.local/bin
 ln -sf "$PWD/.venv/bin/frameshot" ~/.local/bin/frameshot
+ln -sf "$PWD/.venv/bin/frame" ~/.local/bin/frame 2>/dev/null || true  # pre-rename alias
 mkdir -p ~/.local/share/applications
 sed "s|^Exec=frameshot|Exec=$HOME/.local/bin/frameshot|" assets/frameshot.desktop > ~/.local/share/applications/frameshot.desktop
+rm -f ~/.local/share/applications/frame.desktop  # pre-rename leftover
 # Minimal app icon (SVG + raster), replaces the stock camera-photo icon.
 mkdir -p ~/.local/share/icons/hicolor/scalable/apps ~/.local/share/icons/hicolor/256x256/apps
 cp assets/frameshot.svg ~/.local/share/icons/hicolor/scalable/apps/frameshot.svg
@@ -30,8 +32,14 @@ fi
 # screenshots with no portal and no consent dialogs. Needs one logout/login
 # (or `gnome-extensions enable` triggering a shell reload) to take effect.
 EXT_UUID="frameshot-capture@frameshot.local"
+OLD_UUID="frame-capture@frame.local"  # pre-rename extension: remove on upgrade
 if [ "${XDG_CURRENT_DESKTOP:-}" = *GNOME* ] || command -v gnome-extensions >/dev/null 2>&1; then
   mkdir -p ~/.local/share/gnome-shell/extensions
+  if [ -d ~/.local/share/gnome-shell/extensions/"$OLD_UUID" ]; then
+    gnome-extensions disable "$OLD_UUID" 2>/dev/null || true
+    rm -rf ~/.local/share/gnome-shell/extensions/"$OLD_UUID"
+    echo "Removed pre-rename extension $OLD_UUID."
+  fi
   rm -rf ~/.local/share/gnome-shell/extensions/"$EXT_UUID"
   cp -r "shell-extension/$EXT_UUID" ~/.local/share/gnome-shell/extensions/
   # `gnome-extensions enable` rejects freshly copied dirs ("does not exist")
@@ -57,6 +65,10 @@ fi
 # Background service: automatic by default — no manual daemon wrangling.
 # A systemd user service (stable cgroup, restart-on-failure, starts at login).
 # `frameshot --stop` opts back out.
+# Drop the pre-rename unit so two daemons never run side by side.
+systemctl --user stop frame-daemon.service 2>/dev/null || true
+systemctl --user disable frame-daemon.service 2>/dev/null || true
+rm -f ~/.config/systemd/user/frame-daemon.service ~/.config/autostart/frame-daemon.desktop
 mkdir -p ~/.config/systemd/user
 sed -e "s|@HOME@|$HOME|" \
     -e "s|@WAYLAND@|${WAYLAND_DISPLAY:-wayland-0}|" \

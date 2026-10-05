@@ -2,7 +2,7 @@
 # frameshot hotkey setup — default Ctrl+Shift+F (pointer #1).
 # Wayland has no portable in-app global hotkeys, so the compositor must call `frameshot`.
 set -euo pipefail
-HOTKEY="${FRAMESHOT_HOTKEY:-<Primary><Shift>f}"
+HOTKEY="${FRAMESHOT_HOTKEY:-${FRAME_HOTKEY:-<Primary><Shift>f}}"  # FRAME_HOTKEY = pre-rename
 echo "Setting up frameshot hotkey (default Ctrl+Shift+F)..."
 
 setup_gnome() {
