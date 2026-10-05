@@ -122,6 +122,7 @@ class SettingsDialog(QDialog):
         form.addRow(self.interactive_fb)
         self._build_background_section(form)
         self._build_hotkey_section(form)
+        self._build_version_section(form)
         btns = QHBoxLayout()
         ok = QPushButton("Save")
         cancel = QPushButton("Cancel")
@@ -159,6 +160,83 @@ class SettingsDialog(QDialog):
         else:
             self._bg.start_daemon()
         QTimer.singleShot(600, self._refresh_daemon)
+
+    def _build_version_section(self, form):
+        from . import __version__
+        self._update_worker = None
+        self.version_label = QLabel(f"frameshot v{__version__}")
+        self.update_btn = QPushButton("Check for updates")
+        self.update_btn.clicked.connect(self._check_updates)
+        self.update_status = QLabel("")
+        self.update_status.setWordWrap(True)
+        vrow = QHBoxLayout()
+        vrow.addWidget(self.version_label)
+        vrow.addWidget(self.update_btn)
+        vwrap = QWidget()
+        vwrap.setLayout(vrow)
+        form.addRow("Version:", vwrap)
+        form.addRow(self.update_status)
+
+    def _check_updates(self):
+        from . import __version__
+        from .updates import UpdateCheckWorker
+        self.update_btn.setEnabled(False)
+        self.update_status.setText("Checking…")
+        self._update_worker = UpdateCheckWorker(__version__, self)
+        self._update_worker.done.connect(self._update_result)
+        self._update_worker.failed.connect(self._update_failed)
+        self._update_worker.start()
+
+    def _update_failed(self, err: str):
+        self.update_btn.setEnabled(True)
+        self.update_status.setText(f"Update check failed: {err}")
+
+    def _update_result(self, rel: dict):
+        from . import __version__
+        from . import updates as _up
+        self.update_btn.setEnabled(True)
+        if not rel.get("is_newer"):
+            self.update_status.setText(
+                f"You're on the latest version (v{__version__}).")
+            return
+        tag = rel.get("tag", "")
+        notes = (rel.get("body") or "")[:400]
+        from PyQt6.QtWidgets import QMessageBox, QProgressDialog
+        from PyQt6.QtCore import Qt as _Qt
+        box = QMessageBox(self)
+        box.setWindowTitle("frameshot update")
+        box.setText(f"Version {tag} is available (you have v{__version__}).")
+        box.setInformativeText((notes + "\n\nDownload and install now?"
+                                if notes else
+                                "Download and install now?"))
+        box.setStandardButtons(QMessageBox.StandardButton.Yes |
+                               QMessageBox.StandardButton.No)
+        if box.exec() != QMessageBox.StandardButton.Yes:
+            self.update_status.setText(f"Staying on v{__version__}.")
+            return
+        prog = QProgressDialog("Downloading + installing…", "Cancel",
+                               0, 0, self)
+        prog.setWindowModality(_Qt.WindowModality.WindowModal)
+        prog.setMinimumDuration(0)
+        try:
+            asset = _up.pick_asset(rel)
+            if asset is None:
+                raise RuntimeError("Release has no downloadable assets.")
+            import tempfile
+            with tempfile.TemporaryDirectory(prefix="frameshot-update-") as d:
+                path = _up.download_asset(asset["url"], d)
+                if prog.wasCanceled():
+                    self.update_status.setText("Update cancelled.")
+                    return
+                _up.pip_install(path)
+        except Exception as e:  # noqa: BLE001
+            self.update_status.setText(f"Update failed: {e}")
+            return
+        finally:
+            prog.close()
+        self.update_status.setText(f"Updated to {tag} — restarting…")
+        from PyQt6.QtCore import QTimer as _QTimer
+        _QTimer.singleShot(400, lambda: _up.restart_app())
 
     def _build_hotkey_section(self, form):
         from . import background as _bg

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "frameshot"
-version = "0.1.0"
+dynamic = ["version"]
 description = "A modern, Wayland-native screenshot tool with annotation, OCR, and clipboard-first workflow."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -28,3 +28,6 @@ Homepage = "https://github.com/anomalyco/frameshot"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.dynamic]
+version = { attr = "frameshot.__version__" }
