@@ -1,7 +1,7 @@
 # frameshot
 
 [![CI](https://github.com/rohith-rajeev/frame/actions/workflows/ci.yml/badge.svg)](https://github.com/rohith-rajeev/frame/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/anomalyco/frameshot)](https://github.com/rohith-rajeev/frame/releases)
+[![Release](https://img.shields.io/github/v/release/rohith-rajeev/frame)](https://github.com/rohith-rajeev/frame/releases)
 
 **A modern, Wayland-native screenshot tool: press a hotkey, drag, annotate, done — the image is already in your clipboard.**
 
