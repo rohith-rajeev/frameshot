@@ -1,6 +1,6 @@
 # frameshot
 
-> **Status:** CI green on `main` · latest release: [v0.2.0](https://github.com/rohith-rajeev/frameshot/releases) · repo is currently private, so live badge images are omitted on purpose.
+> **Status:** CI green on `main` · latest release: [v0.2.1](https://github.com/rohith-rajeev/frameshot/releases/tag/v0.2.1) · repo is currently private, so live badge images are omitted on purpose.
 
 **A modern, Wayland-native screenshot tool: press a hotkey, drag, annotate, done — the image is already in your clipboard.**
 
