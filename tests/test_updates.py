@@ -28,11 +28,18 @@ def _rel(*names):
 
 def test_pick_asset_prefers_platform_bundle():
     rel = _rel("frameshot-0.2.0.tar.gz", "frameshot-0.2.0-py3-none-any.whl",
-               "frameshot-0.2.0-linux-x86_64.tar.gz")
+               "frameshot-0.2.0-linux-x86_64.tar.gz",
+               "frameshot-0.2.0-macos.tar.gz")
     if sys.platform == "darwin":
-        assert pick_asset(rel)["name"] == "frameshot-0.2.0.tar.gz"
+        assert pick_asset(rel)["name"] == "frameshot-0.2.0-macos.tar.gz"
     else:
         assert pick_asset(rel)["name"] == "frameshot-0.2.0-linux-x86_64.tar.gz"
+
+
+def test_pick_asset_prefers_wheel_over_bare_sdist():
+    # no platform bundle present: wheel beats a bare source tarball
+    rel = _rel("frameshot-0.2.0.tar.gz", "frameshot-0.2.0-py3-none-any.whl")
+    assert pick_asset(rel)["name"] == "frameshot-0.2.0-py3-none-any.whl"
 
 
 def test_pick_asset_falls_back_to_wheel_then_sdist():
